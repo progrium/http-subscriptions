@@ -7,8 +7,8 @@ HTTP Subscriptions is a simple specification that extends HTTP to support subscr
 At a high-level, the protocol is similar the subscription side of PubSubHubbub. 
 
 1. Subscriber agent (client) performs a subscription request against an HTTP Subscriptions aware endpoint known as an event source endpoint. The request contains a callback URL.
-1. The server, called the subscription server, responds accordingly. It will asynchronously perform a verification step.
-1. If verification succeeds, the subscription server will begin making event requests to the callback URL until the subscriber agent performs an unsubscribe request, or the subscription lease expires.
+1. The server, called the subscription server, responds accordingly.
+1. The subscription server makes event requests to the callback URL until the subscriber agent performs an unsubscribe request, or the subscription lease expires.
 
 ## Detailed Flow
 
@@ -23,34 +23,10 @@ The primary identifier of it being a subscription request is the `Pragma: subscr
 	Callback: <http://example.com/callback>; method="POST"; secret="oingoboingo"; rel="subscriber"
 	Prefer: subscription-lease=604800
 
-The server will respond with 202 Accepted and optionally provide a URL to a resource representing the subscription created. However, the subscription is not yet verified, hence the 202 Accepted, not 201 Created. 
+The server will respond with 201 Created and optionally provide a URL to a resource representing the subscription created. 
 
-	HTTP/1.1 202 Accepted
+	HTTP/1.1 201 Created
 	Link: <http://subscription-server.com/subscription>; rel="subscription"
-
-### Subscription Verification
-The verification step is performed by the server before activating the subscription. This step is to verify that the callback URL is willing to accept a potentially high request generating subscription. There are two ways to provide verification: a whitelist/blacklist method, or a per callback URL method. 
-
-The whitelist/blacklist method is tried first. The idea is that a given domain may always want to verify the intent of an HTTP Subscription, so implementing the per callback URL method will needlessly be inefficient. Since we are effectively talking about whether an automated request can be allowed or disallowed for a certain part of a domain, we use the robots.txt at the root of the callback URL domain to verify if a given callback URL on this domain is allowed. 
-
-    # http://example.com/robots.txt
-    User-Agent: *
-    Allow: /somepath
-    Disallow: /
-
-If there is no robots.txt or robots.txt "disallows" a path, the subscription server will attempt verification against the specific callback URL. This is similar to the PubSubHubbub verification of intent mechanism. The subscription server will attempt a special request to the callback URL provide a generated challenge token. It will include other information about the subscription request, including a potential URL to a subscription.
-
-	GET /callback HTTP/1.1
-	Host: example.com
-	Pragma: subscribe-verify=THIS_IS_A_CHALLENGE_STRING
-	Link: <http://subscription-server.com/subscription>; rel="subscription"
-	Prefer: subscribe-lease=3600
-
-The callback URL must return a 200 OK response with the challenge token in a corresponding Pragma directive. This is an opt-in approach, making sure this URL is aware and willing to handle the subscription. 
-
-	HTTP/1.1 200 OK
-	Pragma: subscribe-confirm=THIS_IS_A_CHALLENGE_STRING
-	Content-Length: 0
 
 ### Event Requests
 Now the subscription server can start sending event requests to the callback URL. These requests should conform to the arguments provided in the original Callback header, including which HTTP method to use, and if a Content-HMAC signature should be provided (although the subscription server may include this anyway using an out-of-band secret). The event request should also include a reference to the subscription resource if one exists. The content payload is completely up to the subscription server.
@@ -75,19 +51,7 @@ Unsubscribing is done very similarly to subscription requests on the event sourc
 	Callback: <http://example.com/callback>; method="POST"; secret="oingoboingo"; rel="subscriber"
 	Prefer: subscription-lease=604800
 
-The unsubscribe request should include the same HTTP Subscription details of the original subscribe request. Regardless of the mechanism used to initiate an unsubscribe, the subscription server needs to verify with the callback URL that an unsubscribe is desired. This is done again very similar to subscription verification, however only using the per callback method:
-
-	GET /callback HTTP/1.1
-	Host: example.com
-	Pragma: unsubscribe-verify=THIS_IS_A_CHALLENGE_STRING
-	Link: <http://subscription-server.com/subscription>; rel="subscription"
-	Prefer: subscribe-lease=3600
-
-And the callback URL should respond:
-
-	HTTP/1.1 200 OK
-	Pragma: unsubscribe-confirm=THIS_IS_A_CHALLENGE_STRING
-	Content-Length: 0
+The unsubscribe request should include the same HTTP Subscription details of the original subscribe request. The server responds with 200 OK if the details match.
 
 ### Leasing and Automatic Refreshing
 TODO
